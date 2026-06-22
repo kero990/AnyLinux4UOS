@@ -132,7 +132,7 @@ jobs:
 
           # 使用 shopt -s dotglob 包含隐藏文件，将所有内容移入 files
           shopt -s dotglob
-          mv squashfs-root/* "$APP_DIR/files/"
+          mv AppDir/* "$APP_DIR/files/"
           shopt -u dotglob
 
           # 提取 Desktop 和图标文件
