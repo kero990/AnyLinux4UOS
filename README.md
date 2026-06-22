@@ -1,0 +1,2 @@
+# AnyLinux4UOS
+使用AnyLinux项目，为UOS/DeepinV20等基于debian10的系统构建Krita等软件包。
