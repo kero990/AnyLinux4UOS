@@ -1,0 +1,213 @@
+name: Build AppImages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: appimage-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: latest
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    container: ghcr.io/pkgforge-dev/archlinux:latest
+    outputs:
+      version: ${{ steps.make_appimage.outputs.VERSION }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps: 
+      - uses: actions/checkout@v4
+      - name: Preparing Container
+        uses: pkgforge-dev/anylinux-setup-action@0964f2258d6c93d1391359978dde081fd8b3c6af # v2
+      - name: Install Dependencies
+        run:  |
+          ./get-debloated-pkgs.sh --add-common --add-mesa --prefer-nano libdecor-mini 
+          pacman -S --noconfirm --needed pipewire-jack krita python-pyqt6
+      - name: Make AppImage
+        id: make_appimage
+        run:  |
+          # 提取纯净版本号
+          RAW_VERSION=$(pacman -Q krita | awk '{print $2}')
+          CLEAN_VERSION=$(echo $RAW_VERSION | cut -d'-' -f1)
+          echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          export VERSION=$RAW_VERSION
+          
+          export QT_QPA_PLATFORMTHEME=qt6ct
+          export DEPLOY_QML=1
+          export DEPLOY_PYTHON=1
+          export PATH_MAPPING='
+          /usr/share/krita:${SHARUN_DIR}/share/krita
+          /usr/share/kritaplugins:${SHARUN_DIR}/share/kritaplugins
+          /usr/lib/krita-python-libs:${SHARUN_DIR}/lib/krita-python-libs
+          /usr/share/color/icc/krita:${SHARUN_DIR}/share/color/icc/krita
+          /usr/share/color-schemes:${SHARUN_DIR}/share/color-schemes
+          '
+          export DESKTOP=/usr/share/applications/org.kde.krita.desktop
+          export ICON=/usr/share/icons/hicolor/256x256/apps/krita.png
+          export APPDIR="$BUILD_DIR/AppDir"
+          export OUTPATH="$BUILD_DIR/out"
+
+          mkdir -p "$OUTPATH"
+          shopt -s nullglob
+          color_schemes=(/usr/share/color-schemes/Krita*)
+
+          ./quick-sharun.sh \
+            /usr/bin/krita \
+            /usr/bin/krita_version \
+            /usr/bin/kritarunner \
+            /usr/lib/krita-python-libs \
+            /usr/share/color/icc/krita \
+            /usr/share/kritaplugins \
+            "${color_schemes[@]}"
+
+          printf '\nQT_QPA_PLATFORMTHEME=qt6ct\n' >> "$APPDIR/.env"
+
+          ./quick-sharun.sh --make-appimage
+          
+          find . -name "*.AppImage" -exec mv {} "krita-${CLEAN_VERSION}-${{ matrix.platform.arch }}.AppImage" \;
+
+      - name: Upload AppImage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: krita-appimage-${{ matrix.platform.arch }}
+          path: "*.AppImage"
+          retention-days: 1
+
+  package_deb:
+    needs: build
+    strategy:
+      matrix:
+        platform:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    container: python:3.11-buster
+    steps:
+      - name: Download AppImage Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: krita-appimage-${{ matrix.platform.arch }}
+          path: .
+
+      - name: Package DEB for Deepin
+        run: |
+          # 修复 Debian 10 (Buster) EOL 后 apt 源失效报错问题
+          sed -i s@deb.debian@archive.debian@g /etc/apt/sources.list
+          apt update && apt install -y dpkg wget curl build-essential unzip xz-utils
+
+          # 配置架构变量
+          if [ "${{ matrix.platform.arch }}" = "x86_64" ]; then
+            DEB_ARCH="amd64"
+          else
+            DEB_ARCH="arm64"
+          fi
+          VERSION="${{ needs.build.outputs.version }}"
+
+          # 解压 AppImage (解压后产物在 squashfs-root 目录下)
+          chmod +x *.AppImage
+          ./*.AppImage --appimage-extract
+
+          # 创建 Deepin 包结构
+          APP_DIR="deb/opt/apps/org.krita.anylinux"
+          mkdir -p deb/DEBIAN
+          mkdir -p "$APP_DIR/entries/applications"
+          mkdir -p "$APP_DIR/entries/icons/hicolor/256x256/apps"
+          mkdir -p "$APP_DIR/files"
+
+          # 使用 shopt -s dotglob 包含隐藏文件，将所有内容移入 files
+          shopt -s dotglob
+          mv squashfs-root/* "$APP_DIR/files/"
+          shopt -u dotglob
+
+          # 提取 Desktop 和图标文件
+          cp "$APP_DIR/files/krita.png" "$APP_DIR/entries/icons/hicolor/256x256/apps/"
+          cp "$APP_DIR/files/org.kde.krita.desktop" "$APP_DIR/entries/applications/"
+
+          # Deepin 规范需要将 Desktop 的 Exec 路径指向正确绝对路径，否则会启动失败
+          sed -i "s|^Exec=.*|Exec=/opt/apps/org.krita.anylinux/files/AppRun %U|" "$APP_DIR/entries/applications/org.kde.krita.desktop"
+
+          # 自动计算 Installed-Size (单位 KB)
+          SIZE_KB=$(du -sk deb/opt | cut -f1)
+
+          cat > deb/DEBIAN/control << EOF
+          Package: org.krita.anylinux
+          Version: $VERSION
+          Installed-Size: $SIZE_KB
+          Maintainer: kero990 <kero990@qq.com>
+          Section: graphics
+          Architecture: $DEB_ARCH
+          Priority: optional
+          Description: Krita 是一款专业的免费开源绘画程序。它由艺术家们开发，旨在让每个人都能使用负担得起的艺术工具。
+           Krita 是一款专业的免费开源绘画程序。它由艺术家们开发，旨在让每个人都能使用负担得起的艺术工具。
+          EOF
+
+          cat > "$APP_DIR/info" << EOF
+          {
+            "appid": "org.krita.anylinux",
+            "name": "Krita",
+            "version": "$VERSION",
+            "arch": ["$DEB_ARCH"],
+            "permissions": {
+              "autostart": true,
+              "notification": true,
+              "trayicon": true,
+              "clipboard": true,
+              "account": true,
+              "bluetooth": true,
+              "camera": true,
+              "audio_record": true,
+              "installed_apps": true
+            }
+          }
+          EOF
+
+          # 生成并重命名 deb 包
+          DEB_NAME="org.krita.anylinux_${VERSION}_${DEB_ARCH}.deb"
+          dpkg-deb -Zxz -b deb "$DEB_NAME"
+
+      - name: Upload DEB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: krita-deb-${{ matrix.platform.arch }}
+          path: "*.deb"
+          retention-days: 1
+
+  release:
+    needs: [build, package_deb] # 等待前两个流程都顺利结束
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: krita-*    # 使用星号直接抓取 AppImage 和 DEB 的 4 个产物
+          path: release-files
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: krita-${{ needs.build.outputs.version }}
+          files: release-files/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
