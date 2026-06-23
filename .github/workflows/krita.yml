@@ -31,20 +31,27 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps: 
       - uses: actions/checkout@v4
+      
       - name: Preparing Container
         uses: pkgforge-dev/anylinux-setup-action@0964f2258d6c93d1391359978dde081fd8b3c6af # v2
+        
       - name: Install Dependencies
         run:  |
           get-debloated-pkgs --add-common --add-mesa --prefer-nano libdecor-mini 
           pacman -S --noconfirm --needed pipewire-jack krita python-pyqt6
+          
       - name: Make AppImage
         id: make_appimage
         run:  |
-          # 提取纯净版本号
           RAW_VERSION=$(pacman -Q krita | awk '{print $2}')
           CLEAN_VERSION=$(echo $RAW_VERSION | cut -d'-' -f1)
           echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
           export VERSION=$RAW_VERSION
+          
+          # 【修复点1】明确指定 BUILD_DIR 为 GitHub 的工作区路径
+          export BUILD_DIR="$GITHUB_WORKSPACE"
+          export APPDIR="$BUILD_DIR/AppDir"
+          export OUTPATH="$BUILD_DIR/out"
           
           export QT_QPA_PLATFORMTHEME=qt6ct
           export DEPLOY_QML=1
@@ -58,8 +65,6 @@ jobs:
           '
           export DESKTOP=/usr/share/applications/org.kde.krita.desktop
           export ICON=/usr/share/icons/hicolor/256x256/apps/krita.png
-          export APPDIR="$BUILD_DIR/AppDir"
-          export OUTPATH="$BUILD_DIR/out"
 
           mkdir -p "$OUTPATH"
           shopt -s nullglob
@@ -78,7 +83,8 @@ jobs:
 
           quick-sharun --make-appimage
           
-          find . -name "*.AppImage" -exec mv {} "krita-${CLEAN_VERSION}-${{ matrix.platform.arch }}.AppImage" \;
+          # 【修复点2】扩大查找范围，确保能精准找到产物并重命名
+          find "$GITHUB_WORKSPACE" -maxdepth 3 -name "*.AppImage" -exec mv {} "$GITHUB_WORKSPACE/krita-${CLEAN_VERSION}-${{ matrix.platform.arch }}.AppImage" \;
 
       - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
@@ -86,6 +92,8 @@ jobs:
           name: krita-appimage-${{ matrix.platform.arch }}
           path: "*.AppImage"
           retention-days: 1
+          # 【修复点3】如果没抓取到文件，立即报错阻断流程，杜绝“假成功”
+          if-no-files-found: error 
 
   package_deb:
     needs: build
@@ -107,11 +115,9 @@ jobs:
 
       - name: Package DEB for Deepin
         run: |
-          # 修复 Debian 10 (Buster) EOL 后 apt 源失效报错问题
           sed -i s@deb.debian@archive.debian@g /etc/apt/sources.list
           apt update && apt install -y dpkg wget curl build-essential unzip xz-utils
 
-          # 配置架构变量
           if [ "${{ matrix.platform.arch }}" = "x86_64" ]; then
             DEB_ARCH="amd64"
           else
@@ -119,30 +125,24 @@ jobs:
           fi
           VERSION="${{ needs.build.outputs.version }}"
 
-          # 解压 AppImage (解压后产物在 squashfs-root 目录下)
           chmod +x *.AppImage
           ./*.AppImage --appimage-extract
 
-          # 创建 Deepin 包结构
           APP_DIR="deb/opt/apps/org.krita.anylinux"
           mkdir -p deb/DEBIAN
           mkdir -p "$APP_DIR/entries/applications"
           mkdir -p "$APP_DIR/entries/icons/hicolor/256x256/apps"
           mkdir -p "$APP_DIR/files"
 
-          # 使用 shopt -s dotglob 包含隐藏文件，将所有内容移入 files
           shopt -s dotglob
-          mv AppDir/* "$APP_DIR/files/"
+          mv squashfs-root/* "$APP_DIR/files/"
           shopt -u dotglob
 
-          # 提取 Desktop 和图标文件
           cp "$APP_DIR/files/krita.png" "$APP_DIR/entries/icons/hicolor/256x256/apps/"
           cp "$APP_DIR/files/org.kde.krita.desktop" "$APP_DIR/entries/applications/"
 
-          # Deepin 规范需要将 Desktop 的 Exec 路径指向正确绝对路径，否则会启动失败
           sed -i "s|^Exec=.*|Exec=/opt/apps/org.krita.anylinux/files/AppRun %U|" "$APP_DIR/entries/applications/org.kde.krita.desktop"
 
-          # 自动计算 Installed-Size (单位 KB)
           SIZE_KB=$(du -sk deb/opt | cut -f1)
 
           cat > deb/DEBIAN/control << EOF
@@ -177,7 +177,6 @@ jobs:
           }
           EOF
 
-          # 生成并重命名 deb 包
           DEB_NAME="org.krita.anylinux_${VERSION}_${DEB_ARCH}.deb"
           dpkg-deb -Zxz -b deb "$DEB_NAME"
 
@@ -187,9 +186,10 @@ jobs:
           name: krita-deb-${{ matrix.platform.arch }}
           path: "*.deb"
           retention-days: 1
+          if-no-files-found: error
 
   release:
-    needs: [build, package_deb] # 等待前两个流程都顺利结束
+    needs: [build, package_deb]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -197,7 +197,7 @@ jobs:
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: krita-*    # 使用星号直接抓取 AppImage 和 DEB 的 4 个产物
+          pattern: krita-*
           path: release-files
           merge-multiple: true
 
