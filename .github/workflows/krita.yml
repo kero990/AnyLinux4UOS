@@ -106,6 +106,9 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.platform.runner }}
     container: python:3.11-buster
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
     steps:
       - name: Download AppImage Artifact
         uses: actions/download-artifact@v4
@@ -114,6 +117,7 @@ jobs:
           path: .
 
       - name: Package DEB for Deepin
+        shell: bash
         run: |
           sed -i s@deb.debian@archive.debian@g /etc/apt/sources.list
           apt update && apt install -y dpkg wget curl build-essential unzip xz-utils
@@ -135,11 +139,11 @@ jobs:
           mkdir -p "$APP_DIR/files"
 
           shopt -s dotglob
-          mv squashfs-root/* "$APP_DIR/files/"
+          mv AppDir/* "$APP_DIR/files/"
           shopt -u dotglob
 
-          cp "$APP_DIR/files/krita.png" "$APP_DIR/entries/icons/hicolor/256x256/apps/"
-          cp "$APP_DIR/files/org.kde.krita.desktop" "$APP_DIR/entries/applications/"
+          cp AppDir/krita.png" "$APP_DIR/entries/icons/hicolor/256x256/apps/"
+          cp AppDir/org.kde.krita.desktop" "$APP_DIR/entries/applications/"
 
           sed -i "s|^Exec=.*|Exec=/opt/apps/org.krita.anylinux/files/AppRun %U|" "$APP_DIR/entries/applications/org.kde.krita.desktop"
 
