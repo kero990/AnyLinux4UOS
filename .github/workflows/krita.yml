@@ -142,8 +142,8 @@ jobs:
           mv AppDir/* "$APP_DIR/files/"
           shopt -u dotglob
 
-          cp AppDir/krita.png" "$APP_DIR/entries/icons/hicolor/256x256/apps/"
-          cp AppDir/org.kde.krita.desktop" "$APP_DIR/entries/applications/"
+          cp AppDir/krita.png "$APP_DIR/entries/icons/hicolor/256x256/apps/"
+          cp AppDir/org.kde.krita.desktop "$APP_DIR/entries/applications/"
 
           sed -i "s|^Exec=.*|Exec=/opt/apps/org.krita.anylinux/files/AppRun %U|" "$APP_DIR/entries/applications/org.kde.krita.desktop"
 
