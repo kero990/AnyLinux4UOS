@@ -1,4 +1,11 @@
 name: Build Android Translation Layer AppImage (ARM64)
+
+on:
+  workflow_dispatch:          # 允许手动触发
+  push:
+    tags:
+      - 'v*'                 # 推送版本标签时自动构建
+
 jobs:
   build:
     runs-on: ubuntu-22.04-arm          # 使用 GitHub 的 ARM64 运行器
@@ -28,8 +35,6 @@ jobs:
           cd /
 
 
-
-
       - name: Install yay and android_translation_layer from AUR
         run: |
           # 为 nobody 创建可写的临时家目录
@@ -43,11 +48,12 @@ jobs:
           # 安装 yay
           git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
           cd /tmp/yay-bin
-          chown -R nobody:nobody /tmp/yay-bin /tmp/nobody-home
+         chown -R nobody:nobody /tmp/yay-bin /tmp/nobody-home
           sudo -u nobody HOME=/tmp/nobody-home makepkg -si --noconfirm
 
           # 安装 ATL（同样指定 HOME）
           sudo -u nobody HOME=/tmp/nobody-home yay -S --noconfirm android_translation_layer
+
 
 
       - name: Assemble AppDir and create AppImage
@@ -90,3 +96,55 @@ jobs:
           chmod +x AppDir/bin/fix-desktop-entries.src.hook
 
           # Desktop file
+          cat > AppDir/android-translation-layer.desktop <<EOF
+          [Desktop Entry]
+          Name=Android Translation Layer
+          Exec=android-translation-layer
+          Comment=A translation layer that allows running Android apps on a Linux system
+          StartupWMClass=android-translation-layer
+          Type=Application
+          Categories=Utility
+          Icon=android-translation-layer
+          EOF
+
+          # Environment for quick-sharun
+          export OUTPATH=./dist
+          export DEPLOY_OPENGL=1
+          export DEPLOY_GSTREAMER=1
+          export DEPLOY_PIPEWIRE=1
+          export ICON="https://gitlab.com/android_translation_layer/android_translation_layer/-/raw/master/doc/logo.svg"
+          export PATH_MAPPING='/usr/bin/addr2line:${SHARUN_DIR}/bin/addr2line'
+
+          quick-sharun \
+            /usr/bin/android-translation-layer \
+            /usr/bin/addr2line                 \
+            /usr/bin/dex2oat                   \
+            /usr/bin/dalvikvm                  \
+            /usr/bin/dx                        \
+            /usr/lib/libOpenSLES.so*           \
+            /usr/lib/java                      \
+            /usr/lib/art                       \
+            /usr/share/atl
+
+          # Bundle Java CA certificates
+          mkdir -p ./AppDir/share/ssl/certs/java
+          cp -v /etc/ca-certificates/extracted/java-cacerts.jks ./AppDir/share/ssl/certs/java/cacerts
+
+          # Generate AppImage
+          quick-sharun --make-appimage
+
+          # List output for debugging
+          ls -lh *.AppImage
+
+      - name: Upload AppImage as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android_Translation_Layer-${{ github.sha }}-arm64
+          path: ./*.AppImage
+
+      - name: Create release (only on tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./*.AppImage
+          generate_release_notes: true
