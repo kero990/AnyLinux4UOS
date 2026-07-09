@@ -20,7 +20,7 @@ jobs:
 
       - name: Install base dependencies
         run: |
-          pacman -Syu --noconfirm pipewire-audio patchelf
+          pacman -Syu --noconfirm pipewire-audio patchelf meson ninja vulkan-devel
           get-debloated-pkgs --add-mesa libxml2-mini opus-mini gdk-pixbuf2-mini librsvg-mini
 
       - name: Build vixl with Meson (Python 3 compatible)
