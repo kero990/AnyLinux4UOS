@@ -37,9 +37,11 @@ jobs:
 
       - name: Install yay and android_translation_layer from AUR
         run: |
-          # 为 nobody 创建可写的临时家目录
+          # 为 nobody 创建可写的家目录
           mkdir -p /tmp/nobody-home
-          chown nobody:nobody /tmp/nobody-home
+          # 修改 nobody 的家目录（/etc/passwd）
+          sed -i 's|^nobody:x:.*:/|nobody:x:65534:65534:nobody:/tmp/nobody-home:/usr/bin/nologin|' /etc/passwd
+          chown -R nobody:nobody /tmp/nobody-home
 
           # 允许 nobody 免密码使用 pacman
           echo "nobody ALL=(ALL) NOPASSWD: /usr/bin/pacman" >> /etc/sudoers
@@ -48,12 +50,11 @@ jobs:
           # 安装 yay
           git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
           cd /tmp/yay-bin
-          chown -R nobody:nobody /tmp/yay-bin /tmp/nobody-home
-          sudo -u nobody HOME=/tmp/nobody-home makepkg -si --noconfirm
+          chown -R nobody:nobody /tmp/yay-bin
+          sudo -u nobody makepkg -si --noconfirm
 
-          # 安装 ATL（同样指定 HOME）
-          sudo -u nobody HOME=/tmp/nobody-home yay -S --noconfirm android_translation_layer
-
+          # 安装 ATL（现在 nobody 的家目录已可用）
+          sudo -u nobody yay -S --noconfirm android_translation_layer
 
 
       - name: Assemble AppDir and create AppImage
