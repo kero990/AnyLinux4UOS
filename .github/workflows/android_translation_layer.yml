@@ -29,7 +29,7 @@ jobs:
           cd /tmp/vixl
           curl -sSL "https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/testing/vixl/0001-vixl-Meson-support.patch" -o /tmp/meson.patch
           patch -p1 --batch < /tmp/meson.patch
-          meson setup build --prefix=/usr -Dbuild_type=release
+          meson setup build --prefix=/usr --buildtype=release
           ninja -C build
           ninja -C build install
           cd /
