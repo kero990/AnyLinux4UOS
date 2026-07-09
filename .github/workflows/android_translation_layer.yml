@@ -48,7 +48,7 @@ jobs:
           # 安装 yay
           git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
           cd /tmp/yay-bin
-         chown -R nobody:nobody /tmp/yay-bin /tmp/nobody-home
+          chown -R nobody:nobody /tmp/yay-bin /tmp/nobody-home
           sudo -u nobody HOME=/tmp/nobody-home makepkg -si --noconfirm
 
           # 安装 ATL（同样指定 HOME）
