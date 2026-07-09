@@ -27,8 +27,8 @@ jobs:
         run: |
           git clone https://github.com/Linaro/vixl -b 8.0.0 /tmp/vixl
           cd /tmp/vixl
-          curl -sSL "https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/testing/vixl/0001-vixl-Meson-support.patch" -o meson.patch
-          patch -p1 --batch < meson.patch
+          curl -sSL "https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/testing/vixl/0001-vixl-Meson-support.patch" -o /tmp/meson.patch
+          patch -p1 --batch < /tmp/meson.patch
           meson setup build --prefix=/usr -Dbuild_type=release
           ninja -C build
           ninja -C build install
