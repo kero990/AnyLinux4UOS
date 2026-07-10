@@ -54,6 +54,7 @@ jobs:
           sudo -u nobody makepkg -si --noconfirm
 
           # 安装 ATL（现在 nobody 的家目录已可用）
+          export _JAVA_OPTIONS="-Xmx4g"
           sudo -u nobody yay -S --noconfirm android_translation_layer
 
 
