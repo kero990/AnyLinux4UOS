@@ -72,6 +72,7 @@ jobs:
           cd ARMSX2
           echo "Building FFmpeg and Qt dependencies..."
           chmod +x .github/workflows/scripts/linux/build-dependencies-qt.sh
+          sed -i '/^echo "Building Qt Base..."/,/^cd \.\.$/s/^/#/' .github/workflows/scripts/linux/build-dependencies-qt.sh
           BUILD_FFMPEG=1 .github/workflows/scripts/linux/build-dependencies-qt.sh "$HOME/deps"
 
           echo "Downloading patches.zip..."
