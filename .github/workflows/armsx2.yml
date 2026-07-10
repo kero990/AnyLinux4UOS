@@ -1,8 +1,9 @@
 name: Build ARMSX2 AppImage (ARM64) with version from tag
 
 on:
-  workflow_dispatch:
- 
+  workflow_dispatch:          # 手动触发，会使用最新 Linux 标签
+
+
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
@@ -28,32 +29,43 @@ jobs:
           sudo -u nobody makepkg -si --noconfirm
           sudo -u nobody yay -S --noconfirm plutosvg-git rapidyaml
 
-      - name: Clone ARMSX2
-        uses: actions/checkout@v4      # 检出触发标签对应的代码
-        with:
-          repository: ARMSX2/ARMSX2
-          ref: ${{ github.ref }}
-          submodules: recursive
-          path: ARMSX2
-
-      - name: Extract latest Linux tag version
-        id: version
+      - name: Clone ARMSX2 and determine version
+        id: checkout
         run: |
-          # 获取所有标签，过滤包含 "linux" 的，按版本排序取最新
-          git -C ARMSX2 fetch --tags
-          TAG=$(git -C ARMSX2 tag | grep -i 'linux' | sort -V | tail -n 1)
-          if [ -z "$TAG" ]; then
-            echo "No Linux tag found, using fallback 0.0.0"
-            TAG="0.0.0"
+          # 先克隆默认分支（macOS），后面再根据需要切换
+          git clone --recursive -b macOS https://github.com/ARMSX2/ARMSX2
+          cd ARMSX2
+
+          # 获取所有标签
+          git fetch --tags
+
+          # 判断触发类型：是标签还是手动触发
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            # 推送标签触发：直接检出该标签
+            echo "Triggered by tag: ${{ github.ref_name }}"
+            git checkout ${{ github.ref_name }}
+            # 提取版本号：从标签名去掉 "ARMSX2 linux " 前缀，例如得到 0.0.1
+            VERSION=$(echo "${{ github.ref_name }}" | sed -nE 's/^ARMSX2 linux *v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')
+            if [ -z "$VERSION" ]; then
+              echo "Failed to parse version from tag, using 0.0.0"
+              VERSION="0.0.0"
+            fi
+          else
+            # 手动触发：查找最新的 Linux 标签
+            echo "Manual trigger, finding latest Linux tag..."
+            LATEST_TAG=$(git tag | grep -i 'linux' | sort -V | tail -n 1)
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Checking out latest Linux tag: $LATEST_TAG"
+              git checkout "$LATEST_TAG"
+              VERSION=$(echo "$LATEST_TAG" | sed -nE 's/^ARMSX2 linux *v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')
+            else
+              echo "No Linux tag found, staying on macOS branch, using version 0.0.0"
+              VERSION="0.0.0"
+            fi
           fi
-          # 提取纯数字版本号，假设格式为 "ARMSX2 linux x.y.z" 或 "ARMSX2 linux vx.y.z"
-          VERSION=$(echo "$TAG" | sed -nE 's/^.*linux *v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')
-          if [ -z "$VERSION" ]; then
-            VERSION="0.0.0"
-          fi
-          echo "Detected Linux tag: $TAG -> version: $VERSION"
+
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
 
       - name: Build dependencies and compile
         run: |
@@ -85,7 +97,6 @@ jobs:
         run: |
           cd ARMSX2
           export OUTPATH=./dist
-          # VERSION 环境变量已从之前步骤设置，quick-sharun 会自动使用
           echo "Packaging ARMSX2 version: $VERSION"
 
           quick-sharun \
@@ -98,10 +109,9 @@ jobs:
           cp bin/utils/ AppDir/bin/ -r
           cp bin/docs/ AppDir/bin/ -r
 
-          # 生成 AppImage，VERSION 会影响文件名和内部信息
           quick-sharun --make-appimage
 
-          # 确保 AppImage 文件名包含版本号（quick-sharun 可能自动生成，否则重命名）
+          # 重命名为带版本号的文件名
           if ls *.AppImage 2>/dev/null; then
             APPIMAGE_FILE=$(ls *.AppImage | head -1)
             NEW_NAME="ARMSX2-${VERSION}-linux-aarch64.AppImage"
@@ -109,17 +119,17 @@ jobs:
             echo "Renamed to $NEW_NAME"
           fi
 
-          # 移动到工作区方便上传
+          # 移动到工作区根目录，方便后续上传
           cp *.AppImage $GITHUB_WORKSPACE/ || true
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ARMSX2-${{ steps.version.outputs.version }}-arm64
+          name: ARMSX2-${{ env.VERSION }}-arm64
           path: "*.AppImage"
 
       - name: Create release (only on tags)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: "*.AppImage"
