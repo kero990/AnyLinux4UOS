@@ -101,6 +101,31 @@ jobs:
           cd ARMSX2
           export OUTPATH=./dist
           echo "Packaging ARMSX2 version: $VERSION"
+          # DESKTOP
+          cat > armsx2-qt.desktop <<EOF 
+          [Desktop Entry]
+          Version=1.0
+          Terminal=false
+          Type=Application
+          Name=ARMSX2
+          StartupWMClass=ARMSX2
+          GenericName=PlayStation 2 Emulator
+          Comment=Sony PlayStation 2 emulator
+          Exec=armsx2-qt
+          Icon=ARMSX2
+          Keywords=game;emulator;
+          Categories=Game;Emulator;
+          X-AppImage-Name=ARMSX2
+          X-AppImage-Version=v0.0.1
+          X-AppImage-Arch=aarch64
+          EOF
+          
+          export DESKTOP=armsx2-qt.desktop
+          export ICON=bin/resources/icons/AppIconLarge.png
+          export ARCH=$(uname -m)
+          export DEPLOY_VULKAN=1
+          export DEPLOY_OPENGL=1
+          export DEPLOY_QT=1       
 
           quick-sharun \
             $PWD/bin/armsx2-qt \
@@ -114,16 +139,9 @@ jobs:
 
           quick-sharun --make-appimage
 
-          # 重命名为带版本号的文件名
-          if ls *.AppImage 2>/dev/null; then
-            APPIMAGE_FILE=$(ls *.AppImage | head -1)
-            NEW_NAME="ARMSX2-${VERSION}-linux-aarch64.AppImage"
-            mv "$APPIMAGE_FILE" "$NEW_NAME"
-            echo "Renamed to $NEW_NAME"
-          fi
 
           # 移动到工作区根目录，方便后续上传
-          cp *.AppImage $GITHUB_WORKSPACE/ || true
+          mv dist/*.AppImage $GITHUB_WORKSPACE/ || true
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
