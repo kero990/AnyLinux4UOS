@@ -1,9 +1,8 @@
-name: Build ARMSX2 AppImage (ARM64)
+name: Build ARMSX2 AppImage (ARM64) with version from tag
 
 on:
-  workflow_dispatch:          # 手动触发
-  
-
+  workflow_dispatch:
+ 
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
@@ -16,31 +15,49 @@ jobs:
       - name: Install base dependencies
         run: |
           echo "Installing package dependencies..."
-          echo "---------------------------------------------------------------"
           pacman -Syu --noconfirm shaderc qt6ct kvantum lxqt-qtplugin cmake clang ninja lld libwebp sdl3 base-devel git extra-cmake-modules libbacktrace qt6-tools kddockwidgets vulkan-headers vulkan-icd-loader ccache llvm ffmpeg
-
           echo "Installing debloated packages..."
-          echo "---------------------------------------------------------------"
           get-debloated-pkgs --add-common --prefer-nano
 
           echo "Installing yay..."
-          echo "---------------------------------------------------------------"
           echo "nobody ALL=(ALL) NOPASSWD: /usr/bin/pacman" >> /etc/sudoers
           chage -E -1 -I -1 -m 0 -M 99999 nobody
           git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
           cd /tmp/yay-bin
           chown -R nobody:nobody /tmp/yay-bin
           sudo -u nobody makepkg -si --noconfirm
-
-          echo "Installing AUR packages (plutosvg-git, rapidyaml)..."
           sudo -u nobody yay -S --noconfirm plutosvg-git rapidyaml
 
-      - name: Clone ARMSX2 and build dependencies
-        run: |
-          echo "Cloning ARMSX2 (macOS branch)..."
-          git clone --recursive -b macOS https://github.com/ARMSX2/ARMSX2
-          cd ARMSX2
+      - name: Clone ARMSX2
+        uses: actions/checkout@v4      # 检出触发标签对应的代码
+        with:
+          repository: ARMSX2/ARMSX2
+          ref: ${{ github.ref }}
+          submodules: recursive
+          path: ARMSX2
 
+      - name: Extract latest Linux tag version
+        id: version
+        run: |
+          # 获取所有标签，过滤包含 "linux" 的，按版本排序取最新
+          git -C ARMSX2 fetch --tags
+          TAG=$(git -C ARMSX2 tag | grep -i 'linux' | sort -V | tail -n 1)
+          if [ -z "$TAG" ]; then
+            echo "No Linux tag found, using fallback 0.0.0"
+            TAG="0.0.0"
+          fi
+          # 提取纯数字版本号，假设格式为 "ARMSX2 linux x.y.z" 或 "ARMSX2 linux vx.y.z"
+          VERSION=$(echo "$TAG" | sed -nE 's/^.*linux *v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0"
+          fi
+          echo "Detected Linux tag: $TAG -> version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build dependencies and compile
+        run: |
+          cd ARMSX2
           echo "Building FFmpeg and Qt dependencies..."
           chmod +x .github/workflows/scripts/linux/build-dependencies-qt.sh
           BUILD_FFMPEG=1 .github/workflows/scripts/linux/build-dependencies-qt.sh "$HOME/deps"
@@ -48,9 +65,6 @@ jobs:
           echo "Downloading patches.zip..."
           wget https://github.com/isztldav/pcsx2_patches/releases/latest/download/patches.zip -O bin/resources/patches.zip
 
-      - name: Compile ARMSX2
-        run: |
-          cd ARMSX2
           cmake -B build -GNinja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
@@ -67,35 +81,41 @@ jobs:
 
           ninja -C build install
 
-      - name: Package AppImage
+      - name: Package AppImage with version
         run: |
           cd ARMSX2
           export OUTPATH=./dist
+          # VERSION 环境变量已从之前步骤设置，quick-sharun 会自动使用
+          echo "Packaging ARMSX2 version: $VERSION"
 
-          # 打包可执行文件及依赖库
           quick-sharun \
             $PWD/bin/armsx2-qt \
             $PWD/bin/* \
             /usr/lib/libshaderc*
 
-          # 复制额外资源
           cp bin/resources/ AppDir/bin/ -r
           cp bin/translations/ AppDir/bin/ -r
           cp bin/utils/ AppDir/bin/ -r
           cp bin/docs/ AppDir/bin/ -r
 
-          # 生成 AppImage
+          # 生成 AppImage，VERSION 会影响文件名和内部信息
           quick-sharun --make-appimage
 
-          # 确认产物
-          ls -lh *.AppImage || ls -lh dist/*.AppImage
-          # 将生成的 AppImage 移动到工作区根目录便于上传
-          find . -name "*.AppImage" -exec cp {} $GITHUB_WORKSPACE/ \;
+          # 确保 AppImage 文件名包含版本号（quick-sharun 可能自动生成，否则重命名）
+          if ls *.AppImage 2>/dev/null; then
+            APPIMAGE_FILE=$(ls *.AppImage | head -1)
+            NEW_NAME="ARMSX2-${VERSION}-linux-aarch64.AppImage"
+            mv "$APPIMAGE_FILE" "$NEW_NAME"
+            echo "Renamed to $NEW_NAME"
+          fi
 
-      - name: Upload AppImage as artifact
+          # 移动到工作区方便上传
+          cp *.AppImage $GITHUB_WORKSPACE/ || true
+
+      - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ARMSX2-${{ github.sha }}-arm64
+          name: ARMSX2-${{ steps.version.outputs.version }}-arm64
           path: "*.AppImage"
 
       - name: Create release (only on tags)
