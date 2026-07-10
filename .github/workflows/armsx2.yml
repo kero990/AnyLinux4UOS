@@ -16,7 +16,7 @@ jobs:
       - name: Install base dependencies
         run: |
           echo "Installing package dependencies..."
-          pacman -Syu --noconfirm shaderc qt6ct kvantum lxqt-qtplugin cmake clang ninja lld libwebp sdl3 base-devel git extra-cmake-modules libbacktrace qt6-tools kddockwidgets vulkan-headers vulkan-icd-loader ccache llvm ffmpeg
+          pacman -Syu --noconfirm shaderc qt6ct kvantum lxqt-qtplugin cmake clang ninja lld libwebp sdl3 base-devel git extra-cmake-modules libbacktrace qt6-tools kddockwidgets vulkan-headers vulkan-icd-loader ccache llvm ffmpeg perl
           echo "Installing debloated packages..."
           get-debloated-pkgs --add-common --prefer-nano
 
