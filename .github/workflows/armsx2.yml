@@ -28,6 +28,8 @@ jobs:
           chown -R nobody:nobody /tmp/yay-bin
           sudo -u nobody makepkg -si --noconfirm
           sudo -u nobody yay -S --noconfirm plutosvg-git rapidyaml
+          echo "PATH=$PATH:/usr/bin/core_perl" >> $GITHUB_ENV
+          
 
       - name: Clone ARMSX2 and determine version
         id: checkout
