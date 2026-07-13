@@ -35,7 +35,7 @@ jobs:
         id: checkout
         run: |
           # 先克隆默认分支（macOS），后面再根据需要切换
-          git clone --recursive -b macOS https://github.com/ARMSX2/ARMSX2
+          git clone --recursive  https://github.com/ARMSX2/ARMSX2
           cd ARMSX2
 
           # 获取所有标签
