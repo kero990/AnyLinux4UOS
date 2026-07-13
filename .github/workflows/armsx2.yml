@@ -99,6 +99,8 @@ jobs:
           cd ARMSX2
           ninja -C build install
           ls bin/
+          mkdir -p bin/translations/
+          cp build/pcsx2-qt/*.qm bin/translations/
 
       - name: Package AppImage with version
         run: |
