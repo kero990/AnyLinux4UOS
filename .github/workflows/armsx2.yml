@@ -96,6 +96,7 @@ jobs:
             
       - name: Build 
         run: |
+          cd ARMSX2
           ninja -C build install
           ls bin/
 
