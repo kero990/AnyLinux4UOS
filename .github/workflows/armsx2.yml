@@ -69,7 +69,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Detected version: $VERSION"
 
-      - name: Build dependencies and compile
+      - name: Build dependencies and cmake
         run: |
           cd ARMSX2
           echo "Building FFmpeg and Qt dependencies..."
@@ -93,8 +93,11 @@ jobs:
             -DDISABLE_ADVANCE_SIMD=TRUE \
             -DUSE_LINKED_FFMPEG=ON \
             -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
-
+            
+      - name: Build 
+        run: |
           ninja -C build install
+          ls bin/
 
       - name: Package AppImage with version
         run: |
