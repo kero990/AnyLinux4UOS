@@ -76,7 +76,7 @@ jobs:
           cd open-pdf-studio
           mkdir dist && cd dist
           cp '../target/release/bundle/appimage/Open PDF Studio.AppDir/Open PDF Studio.desktop' .
-          cp '../target/release/bundle/appimage/Open\ PDF\ Studio.AppDir/Open PDF Studio.png' .
+          cp '../target/release/bundle/appimage/Open PDF Studio.AppDir/Open PDF Studio.png' .
           cp ../target/release/open-pdf-studio .
           cp ../target/release/pdfium-worker .
           mkdir AppDir/bin -p
