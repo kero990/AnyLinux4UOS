@@ -21,7 +21,8 @@ jobs:
         
       - name: Install Dependencies
         run:  |
-          get-debloated-pkgs --add-common --add-mesa --prefer-nano libdecor-mini 
+          pacman -Syu --noconfirm readest
+          get-debloated-pkgs --add-common --prefer-nano
 
       - name: Install node
         uses: actions/setup-node@v6
