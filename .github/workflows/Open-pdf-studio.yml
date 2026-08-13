@@ -38,6 +38,7 @@ jobs:
       - run: git clone https://github.com/OpenAEC-Foundation/open-pdf-studio --depth 1
       - run: cd open-pdf-studio && npm ci
       - run: |
+          echo "VERSION=$(curl -s https://api.github.com/repos/OpenAEC-Foundation/open-pdf-studio/releases/latest | jq -r .tag_name)"  >> $GITHUB_ENV
           cd open-pdf-studio && cargo build --release -p pdfium-worker
           mkdir -p open-pdf-studio/src-tauri/binaries
           cp target/release/pdfium-worker open-pdf-studio/src-tauri/binaries/pdfium-worker-x86_64-unknown-linux-gnu
@@ -78,4 +79,43 @@ jobs:
           cp '../target/release/bundle/appimage/Open\ PDF\ Studio.AppDir/Open PDF Studio.png' .
           cp ../target/release/open-pdf-studio .
           cp ../target/release/pdfium-worker .
+          mkdir AppDir/bin -p
+          cp ../src-tauri/binaries/linux-x64/libpdfium.so AppDir/bin
+          cp ../target/release/kaders AppDir/bin
+
+      - name: quick-sharun
+        run: |
+          cd open-pdf-studio/dist
+          export DESKTOP='Open PDF Studio.desktop' ICON='Open PDF Studio.png'
+          quick-sharun open-pdf-studio pdfium-worker
+
+          quick-sharun --make-appimage
+          mv *.AppImage $GITHUB_WORKSPACE/ || true
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-pdf-studio-${{ env.VERSION }}-${{ matrix.platform.arch }}
+          path: "*.AppImage"
+
+          
+  release:
+    needs: build # 确保所有架构编译成功后再创建 Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: get version again
+        run: echo "VERSION=$(curl -s https://api.github.com/repos/OpenAEC-Foundation/open-pdf-studio/releases/latest | jq -r .tag_name)"  >> $GITHUB_ENV
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: open-pdf-studio*
+          merge-multiple: true # 将所有下载的文件解压到同个目录
+
+      - name: Create Combined Release
+        uses: ncipollo/release-action@v1
+        with:
+          name: open-pdf-studio ${{ env.VERSION }}
+          tag: open-pdf-studio_${{ env.VERSION }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "*.AppImage"       
           
