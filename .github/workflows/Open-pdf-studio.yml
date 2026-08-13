@@ -21,7 +21,7 @@ jobs:
         
       - name: Install Dependencies
         run:  |
-          pacman -Syu --noconfirm readest
+          pacman -Syu --noconfirm readest cmake
           get-debloated-pkgs --add-common --prefer-nano
 
       - name: Install node
