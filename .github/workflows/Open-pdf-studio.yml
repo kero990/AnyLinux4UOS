@@ -1,0 +1,81 @@
+name: Open-PDF-Studio
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    container: ghcr.io/pkgforge-dev/archlinux:latest
+    steps: 
+     
+      - name: Preparing Container
+        uses: pkgforge-dev/anylinux-setup-action@0964f2258d6c93d1391359978dde081fd8b3c6af # v2
+        
+      - name: Install Dependencies
+        run:  |
+          get-debloated-pkgs --add-common --add-mesa --prefer-nano libdecor-mini 
+
+      - name: Install node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          check-latest: false
+          package-manager-cache: true
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - run: git clone https://github.com/OpenAEC-Foundation/open-pdf-studio --depth 1
+      - run: cd open-pdf-studio && npm ci
+      - run: |
+          cd open-pdf-studio && cargo build --release -p pdfium-worker
+          mkdir -p open-pdf-studio/src-tauri/binaries
+          cp target/release/pdfium-worker open-pdf-studio/src-tauri/binaries/pdfium-worker-x86_64-unknown-linux-gnu
+          
+      - name: Fetch libpdfium.so
+        run: |
+          cd open-pdf-studio
+          mkdir -p src-tauri/binaries/linux-x64
+          curl -L "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F7834/pdfium-linux-${{ matrix.platform.arch }}.tgz" -o /tmp/pdfium-linux.tgz
+          tar xzf /tmp/pdfium-linux.tgz -C /tmp lib/libpdfium.so
+          cp /tmp/lib/libpdfium.so src-tauri/binaries/linux-x64/libpdfium.so
+
+      - name: Build App
+        uses: tauri-apps/tauri-action@action-v0.6.1
+        with:
+          projectPath: open-pdf-studio/open-pdf-studio
+          includeUpdaterJson: true
+          releaseDraft: false
+          prerelease: false
+          includeDebug: false
+          includeRelease: true
+          updaterJsonKeepUniversal: false
+          isGitea: false
+          uploadPlainBinary: false
+          generateReleaseNotes: false
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ***
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: tauri2026
+          CARGO_HOME: /home/runner/.cargo
+          CARGO_INCREMENTAL: 0
+          CARGO_TERM_COLOR: always
+
+      - name: prepare AppDir
+        run: |
+          cd open-pdf-studio
+          mkdir dist && cd dist
+          cp '../target/release/bundle/appimage/Open PDF Studio.AppDir/Open PDF Studio.desktop' .
+          cp '../target/release/bundle/appimage/Open\ PDF\ Studio.AppDir/Open PDF Studio.png' .
+          cp ../target/release/open-pdf-studio .
+          cp ../target/release/pdfium-worker .
+          
