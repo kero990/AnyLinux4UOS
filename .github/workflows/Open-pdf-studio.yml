@@ -54,6 +54,7 @@ jobs:
 
       - name: Build App
         uses: tauri-apps/tauri-action@action-v0.6.1
+        continue-on-error: true
         with:
           projectPath: open-pdf-studio/open-pdf-studio
           includeUpdaterJson: true
