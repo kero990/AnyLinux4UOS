@@ -36,7 +36,7 @@ jobs:
           toolchain: stable
 
       - run: git clone https://github.com/OpenAEC-Foundation/open-pdf-studio --depth 1
-      - run: cd open-pdf-studio && npm ci
+      - run: cd open-pdf-studio/open-pdf-studio && npm ci
       - run: |
           echo "VERSION=$(curl -s https://api.github.com/repos/OpenAEC-Foundation/open-pdf-studio/releases/latest | jq -r .tag_name)"  >> $GITHUB_ENV
           cd open-pdf-studio && cargo build --release -p pdfium-worker
