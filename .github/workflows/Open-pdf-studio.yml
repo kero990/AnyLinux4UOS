@@ -81,7 +81,8 @@ jobs:
           cp ../target/release/pdfium-worker .
           mkdir AppDir/bin -p
           cp ../src-tauri/binaries/linux-x64/libpdfium.so AppDir/bin
-          cp '../target/release/bundle/appimage_deb/data/usr/lib/Open PDF Studio/' AppDir/lib
+          mkdir 'AppDir/lib/Open PDF Studio' -p
+          cp ../open-pdf-studio/src-tauri/resources/kaders 'AppDir/lib/Open PDF Studio' -r
           cd AppDir/bin && ln -s '../lib/Open PDF Studio/kaders' .
 
       - name: quick-sharun
